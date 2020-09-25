@@ -1,3 +1,4 @@
+use chunked_transfer::Decoder;
 use core::convert::TryFrom;
 use http::{Request, Version};
 #[cfg(not(feature = "support"))]
@@ -340,26 +341,14 @@ pub fn request(mut req: Request<Vec<u8>>, mut config: Config) -> Response<http::
       };
     }
 
-    let (start_chunk, trunc_chunk) =
-      if headers.get("transfer-encoding") == Some(&"chunked".parse().unwrap()) {
-        let mut start_bytes = 0;
-        for byte in bytes[last_byte..].iter() {
-          start_bytes += 1;
-          if *byte == 10 {
-            break;
-          }
-        }
-        let mut trunc_bytes = 0;
-        for byte in bytes[last_byte..].iter().rev() {
-          trunc_bytes += 1;
-          if *byte == 48 {
-            break;
-          }
-        }
-        (start_bytes, trunc_bytes)
-      } else {
-        (0, 0)
-      };
+    if headers.get("transfer-encoding") == Some(&"chunked".parse().unwrap()) {
+      let mut buffer = Vec::with_capacity(bytes.len());
+      buffer.extend(&bytes[..last_byte]);
+      let mut decoder = Decoder::new(&bytes[last_byte..]);
+      if let Ok(..) = decoder.read_to_end(&mut buffer) {
+        bytes = buffer;
+      }
+    }
 
     let status = match String::from_utf8(status_code) {
       Ok(s) => match s.parse::<u16>() {
@@ -420,8 +409,8 @@ pub fn request(mut req: Request<Vec<u8>>, mut config: Config) -> Response<http::
       })
       .status(status);
 
-    let mut body: Vec<u8> = bytes.into_iter().skip(last_byte + start_chunk).collect();
-    body.truncate(body.len() - trunc_chunk);
+    let mut body: Vec<u8> = bytes.into_iter().skip(last_byte).collect();
+    body.truncate(body.len());
 
     *output = Ok(match response.body(body) {
       Ok(res) => res,
@@ -682,26 +671,14 @@ pub fn request_write(
       };
     }
 
-    let (start_chunk, trunc_chunk) =
-      if headers.get("transfer-encoding") == Some(&"chunked".parse().unwrap()) {
-        let mut start_bytes = 0;
-        for byte in bytes[last_byte..].iter() {
-          start_bytes += 1;
-          if *byte == 10 {
-            break;
-          }
-        }
-        let mut trunc_bytes = 0;
-        for byte in bytes[last_byte..].iter().rev() {
-          trunc_bytes += 1;
-          if *byte == 48 {
-            break;
-          }
-        }
-        (start_bytes, trunc_bytes)
-      } else {
-        (0, 0)
-      };
+    if headers.get("transfer-encoding") == Some(&"chunked".parse().unwrap()) {
+      let mut buffer = Vec::with_capacity(bytes.len());
+      buffer.extend(&bytes[..last_byte]);
+      let mut decoder = Decoder::new(&bytes[last_byte..]);
+      if let Ok(..) = decoder.read_to_end(&mut buffer) {
+        bytes = buffer;
+      }
+    }
 
     let status = match String::from_utf8(status_code) {
       Ok(s) => match s.parse::<u16>() {
@@ -760,7 +737,7 @@ pub fn request_write(
       _ => bytes.len(),
     };
 
-    match writer.write_all(&mut bytes[start_at + start_chunk..end_at - trunc_chunk]) {
+    match writer.write_all(&mut bytes[start_at..end_at]) {
       Err(err) => {
         *output = Err(Error::IO(err));
         return;
