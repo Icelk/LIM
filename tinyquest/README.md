@@ -5,7 +5,7 @@ Tinyquest is a Rust library aiming to give you a high-level, yet performant expe
 To use `tinyquest`, add this to your `Cargo.toml`:
 ```
 [dependencies]
-tinyquest = "0.2"
+tinyquest = "0.3"
 ```
 Then, add this to your crate:
 ```
