@@ -117,7 +117,7 @@ pub fn get(url: &str, user_agent: &str) -> Result<Response<http::Response<Vec<u8
 }
 pub fn request(mut req: Request<Vec<u8>>, mut config: Config) -> Response<http::Response<Vec<u8>>> {
   let output = Arc::new(Mutex::new(Err(Error::NotReady)));
-  let thread_output = output.clone();
+  let thread_output = Arc::clone(&output);
   thread::spawn(move || {
     let mut output = thread_output.lock().expect("Failed to get mutex lock.");
 
@@ -157,11 +157,11 @@ pub fn request(mut req: Request<Vec<u8>>, mut config: Config) -> Response<http::
     // Add headers
     for (name, value) in req.headers().iter() {
       http_req.extend(name.as_str().as_bytes());
-      http_req.extend(b": ".iter().cloned());
+      http_req.extend(b": ".iter());
       http_req.extend(value.as_bytes());
-      http_req.extend(b"\r\n".iter().cloned());
+      http_req.extend(b"\r\n".iter());
     }
-    http_req.extend(b"\r\n".iter().cloned());
+    http_req.extend(b"\r\n".iter());
     let mut tcp_stream = match TcpStream::connect(format!("{}:{}", domain, port)) {
       Ok(stream) => stream,
       Err(err) => {
@@ -481,11 +481,11 @@ pub fn request_blocking(
   // Add headers
   for (name, value) in req.headers().iter() {
     http_req.extend(name.as_str().as_bytes());
-    http_req.extend(b": ".iter().cloned());
+    http_req.extend(b": ".iter());
     http_req.extend(value.as_bytes());
-    http_req.extend(b"\r\n".iter().cloned());
+    http_req.extend(b"\r\n".iter());
   }
-  http_req.extend(b"\r\n".iter().cloned());
+  http_req.extend(b"\r\n".iter());
   let mut tcp_stream = match TcpStream::connect(format!("{}:{}", domain, port)) {
     Ok(stream) => stream,
     Err(err) => {
@@ -494,7 +494,7 @@ pub fn request_blocking(
   };
 
   let mut bytes = Vec::new();
-  if port == 433 {
+  if port == 443 {
     #[cfg(feature = "support")]
     {
       let mut tcp_stream = tcp_stream;
@@ -759,7 +759,7 @@ pub fn request_write(
   mut writer: Box<dyn Write + Send>,
 ) -> Response<()> {
   let output: Arc<Mutex<Result<(), Error>>> = Arc::new(Mutex::new(Err(Error::NotReady)));
-  let thread_output = output.clone();
+  let thread_output = Arc::clone(&output);
   thread::spawn(move || {
     let mut output = thread_output.lock().expect("Failed to get mutex lock.");
 
@@ -799,11 +799,11 @@ pub fn request_write(
     // Add headers
     for (name, value) in req.headers().iter() {
       http_req.extend(name.as_str().as_bytes());
-      http_req.extend(b": ".iter().cloned());
+      http_req.extend(b": ".iter());
       http_req.extend(value.as_bytes());
-      http_req.extend(b"\r\n".iter().cloned());
+      http_req.extend(b"\r\n".iter());
     }
-    http_req.extend(b"\r\n".iter().cloned());
+    http_req.extend(b"\r\n".iter());
 
     let mut tcp_stream = match TcpStream::connect(format!("{}:{}", domain, port)) {
       Ok(stream) => stream,
