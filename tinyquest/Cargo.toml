@@ -28,3 +28,6 @@ name = "get"
 
 [[example]]
 name = "write"
+
+[[example]]
+name = "head"
