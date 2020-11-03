@@ -1,15 +1,12 @@
 use chunked_transfer::Decoder;
 use core::convert::TryFrom;
 use http::{Request, Version};
-#[cfg(not(feature = "support"))]
 use native_tls::TlsConnector;
 use std::io::{self, prelude::*};
 use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::{mem, thread};
-#[cfg(feature = "support")]
-use {rustls, webpki, webpki_roots};
 
 #[derive(Debug)]
 pub enum Error {
@@ -172,105 +169,35 @@ pub fn request(mut req: Request<Vec<u8>>, mut config: Config) -> Response<http::
 
         let mut bytes = Vec::new();
         if port == 443 {
-            #[cfg(feature = "support")]
-            {
-                let mut tcp_stream = tcp_stream;
-                let mut config = rustls::ClientConfig::new();
-                config.enable_early_data = true;
-                config
-                    .root_store
-                    .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-                let config = &Arc::new(config);
-                let dns_name = match webpki::DNSNameRef::try_from_ascii_str(domain) {
-                    Ok(dns_name) => dns_name,
-                    Err(..) => {
-                        *output = Err(Error::Request(RequestError::FailedToGetIP));
-                        return;
-                    }
-                };
-                let mut sess = rustls::ClientSession::new(config, dns_name);
-                match tcp_stream.set_nodelay(true) {
-                    Err(..) => {
-                        *output = Err(Error::Request(RequestError::FailedToSetNoDelay));
-                        return;
-                    }
-                    _ => {}
-                };
-
-                // If early data is available with this server, then early_data()
-                // will yield Some(WriteEarlyData) and WriteEarlyData implements
-                // io::Write.  Use this to send the request.
-                if let Some(mut early_data) = sess.early_data() {
-                    match early_data.write(&http_req[..]) {
-                        Err(err) => {
-                            *output = Err(Error::IO(err));
-                            return;
-                        }
-                        _ => {}
-                    };
+            let connector = match TlsConnector::new() {
+                Ok(conn) => conn,
+                Err(..) => {
+                    *output = Err(Error::FailedToConnect);
+                    return;
                 }
-                let mut stream = rustls::Stream::new(&mut sess, &mut tcp_stream);
-
-                // Complete handshake.
-                match stream.flush() {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-
-                // If we didn't send early data, or the server didn't accept it,
-                // then send the request as normal.
-                if !stream.sess.is_early_data_accepted() {
-                    match stream.write_all(&http_req[..]) {
-                        Err(err) => {
-                            *output = Err(Error::IO(err));
-                            return;
-                        }
-                        _ => {}
-                    };
+            };
+            let mut stream = match connector.connect(domain, tcp_stream) {
+                Ok(stream) => stream,
+                Err(..) => {
+                    *output = Err(Error::FailedToHandshake);
+                    return;
                 }
-                match stream.read_to_end(&mut bytes) {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-            }
-            #[cfg(not(feature = "support"))]
-            {
-                let connector = match TlsConnector::new() {
-                    Ok(conn) => conn,
-                    Err(..) => {
-                        *output = Err(Error::FailedToConnect);
-                        return;
-                    }
-                };
-                let mut stream = match connector.connect(domain, tcp_stream) {
-                    Ok(stream) => stream,
-                    Err(..) => {
-                        *output = Err(Error::FailedToHandshake);
-                        return;
-                    }
-                };
+            };
 
-                match stream.write_all(&http_req[..]) {
-                    Ok(()) => (),
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                };
-                match stream.read_to_end(&mut bytes) {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-            }
+            match stream.write_all(&http_req[..]) {
+                Ok(()) => (),
+                Err(err) => {
+                    *output = Err(Error::IO(err));
+                    return;
+                }
+            };
+            match stream.read_to_end(&mut bytes) {
+                Err(err) => {
+                    *output = Err(Error::IO(err));
+                    return;
+                }
+                _ => {}
+            };
         } else {
             match tcp_stream.write_all(&http_req[..]) {
                 Ok(()) => (),
@@ -495,95 +422,31 @@ pub fn request_blocking(
 
     let mut bytes = Vec::new();
     if port == 443 {
-        #[cfg(feature = "support")]
-        {
-            let mut tcp_stream = tcp_stream;
-            let mut config = rustls::ClientConfig::new();
-            config.enable_early_data = true;
-            config
-                .root_store
-                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-            let config = &Arc::new(config);
-            let dns_name = match webpki::DNSNameRef::try_from_ascii_str(domain) {
-                Ok(dns_name) => dns_name,
-                Err(..) => {
-                    return Err(Error::Request(RequestError::FailedToGetIP));
-                }
-            };
-            let mut sess = rustls::ClientSession::new(config, dns_name);
-            match tcp_stream.set_nodelay(true) {
-                Err(..) => {
-                    return Err(Error::Request(RequestError::FailedToSetNoDelay));
-                }
-                _ => {}
-            };
-
-            // If early data is available with this server, then early_data()
-            // will yield Some(WriteEarlyData) and WriteEarlyData implements
-            // io::Write.  Use this to send the request.
-            if let Some(mut early_data) = sess.early_data() {
-                match early_data.write(&http_req[..]) {
-                    Err(err) => {
-                        return Err(Error::IO(err));
-                    }
-                    _ => {}
-                };
+        let connector = match TlsConnector::new() {
+            Ok(conn) => conn,
+            Err(..) => {
+                return Err(Error::FailedToConnect);
             }
-            let mut stream = rustls::Stream::new(&mut sess, &mut tcp_stream);
-
-            // Complete handshake.
-            match stream.flush() {
-                Err(err) => {
-                    return Err(Error::IO(err));
-                }
-                _ => {}
-            };
-
-            // If we didn't send early data, or the server didn't accept it,
-            // then send the request as normal.
-            if !stream.sess.is_early_data_accepted() {
-                match stream.write_all(&http_req[..]) {
-                    Err(err) => {
-                        return Err(Error::IO(err));
-                    }
-                    _ => {}
-                };
+        };
+        let mut stream = match connector.connect(domain, tcp_stream) {
+            Ok(stream) => stream,
+            Err(..) => {
+                return Err(Error::FailedToHandshake);
             }
-            match stream.read_to_end(&mut bytes) {
-                Err(err) => {
-                    return Err(Error::IO(err));
-                }
-                _ => {}
-            };
-        }
-        #[cfg(not(feature = "support"))]
-        {
-            let connector = match TlsConnector::new() {
-                Ok(conn) => conn,
-                Err(..) => {
-                    return Err(Error::FailedToConnect);
-                }
-            };
-            let mut stream = match connector.connect(domain, tcp_stream) {
-                Ok(stream) => stream,
-                Err(..) => {
-                    return Err(Error::FailedToHandshake);
-                }
-            };
+        };
 
-            match stream.write_all(&http_req[..]) {
-                Ok(()) => (),
-                Err(err) => {
-                    return Err(Error::IO(err));
-                }
-            };
-            match stream.read_to_end(&mut bytes) {
-                Err(err) => {
-                    return Err(Error::IO(err));
-                }
-                _ => {}
-            };
-        }
+        match stream.write_all(&http_req[..]) {
+            Ok(()) => (),
+            Err(err) => {
+                return Err(Error::IO(err));
+            }
+        };
+        match stream.read_to_end(&mut bytes) {
+            Err(err) => {
+                return Err(Error::IO(err));
+            }
+            _ => {}
+        };
     } else {
         match tcp_stream.write_all(&http_req[..]) {
             Ok(()) => (),
@@ -799,105 +662,35 @@ pub fn request_write<W: Write + Send + 'static>(
 
         let mut bytes = Vec::new();
         if port == 443 {
-            #[cfg(feature = "support")]
-            {
-                let mut tcp_stream = tcp_stream;
-                let mut config = rustls::ClientConfig::new();
-                config.enable_early_data = true;
-                config
-                    .root_store
-                    .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-                let config = &Arc::new(config);
-                let dns_name = match webpki::DNSNameRef::try_from_ascii_str(domain) {
-                    Ok(dns_name) => dns_name,
-                    Err(..) => {
-                        *output = Err(Error::Request(RequestError::FailedToGetIP));
-                        return;
-                    }
-                };
-                let mut sess = rustls::ClientSession::new(config, dns_name);
-                match tcp_stream.set_nodelay(true) {
-                    Err(..) => {
-                        *output = Err(Error::Request(RequestError::FailedToSetNoDelay));
-                        return;
-                    }
-                    _ => {}
-                };
-
-                // If early data is available with this server, then early_data()
-                // will yield Some(WriteEarlyData) and WriteEarlyData implements
-                // io::Write.  Use this to send the request.
-                if let Some(mut early_data) = sess.early_data() {
-                    match early_data.write(&http_req[..]) {
-                        Err(err) => {
-                            *output = Err(Error::IO(err));
-                            return;
-                        }
-                        _ => {}
-                    };
+            let connector = match TlsConnector::new() {
+                Ok(conn) => conn,
+                Err(..) => {
+                    *output = Err(Error::FailedToConnect);
+                    return;
                 }
-                let mut stream = rustls::Stream::new(&mut sess, &mut tcp_stream);
-
-                // Complete handshake.
-                match stream.flush() {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-
-                // If we didn't send early data, or the server didn't accept it,
-                // then send the request as normal.
-                if !stream.sess.is_early_data_accepted() {
-                    match stream.write_all(&http_req[..]) {
-                        Err(err) => {
-                            *output = Err(Error::IO(err));
-                            return;
-                        }
-                        _ => {}
-                    };
+            };
+            let mut stream = match connector.connect(domain, tcp_stream) {
+                Ok(stream) => stream,
+                Err(..) => {
+                    *output = Err(Error::FailedToHandshake);
+                    return;
                 }
-                match stream.read_to_end(&mut bytes) {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-            }
-            #[cfg(not(feature = "support"))]
-            {
-                let connector = match TlsConnector::new() {
-                    Ok(conn) => conn,
-                    Err(..) => {
-                        *output = Err(Error::FailedToConnect);
-                        return;
-                    }
-                };
-                let mut stream = match connector.connect(domain, tcp_stream) {
-                    Ok(stream) => stream,
-                    Err(..) => {
-                        *output = Err(Error::FailedToHandshake);
-                        return;
-                    }
-                };
+            };
 
-                match stream.write_all(&http_req[..]) {
-                    Ok(()) => (),
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                };
-                match stream.read_to_end(&mut bytes) {
-                    Err(err) => {
-                        *output = Err(Error::IO(err));
-                        return;
-                    }
-                    _ => {}
-                };
-            }
+            match stream.write_all(&http_req[..]) {
+                Ok(()) => (),
+                Err(err) => {
+                    *output = Err(Error::IO(err));
+                    return;
+                }
+            };
+            match stream.read_to_end(&mut bytes) {
+                Err(err) => {
+                    *output = Err(Error::IO(err));
+                    return;
+                }
+                _ => {}
+            };
         } else {
             match tcp_stream.write_all(&http_req[..]) {
                 Ok(()) => (),
