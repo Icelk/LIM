@@ -460,10 +460,31 @@ impl Client {
             }
         }
     }
-    // pub fn write(&mut self, writer: &mut dyn Write) -> Result<()> {
-    //     let vec = Self::read_to_vec(&mut self.stream)?;
-    //     writer.write_all(&vec)
-    // }
+    pub fn write(&mut self, writer: &mut dyn Write) -> Result<()> {
+        let (bytes, last_byte, _, _, _) = self._handle()?;
+
+        let start_at = match self.config.header {
+            Content::Body => last_byte,
+            _ => 0,
+        };
+        let end_at = match self.config.header {
+            Content::Header => last_byte,
+            _ => bytes.len(),
+        };
+
+        writer
+            .write_all(&bytes[start_at..end_at])
+            .map_err(|err| err.into())
+    }
+    pub fn follow_redirects_write(&mut self, writer: &mut dyn Write) -> Result<()> {
+        loop {
+            match self.write(writer) {
+                Err(Error::NotReady) => continue,
+                Err(err) => return Err(err),
+                Ok(result) => return Ok(result),
+            }
+        }
+    }
 }
 
 const LINE_ENDING: &[u8] = b"\r\n";
