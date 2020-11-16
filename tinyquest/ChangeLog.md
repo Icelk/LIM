@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 0.4.0 - 2020-11-16
+### Changed
+- Completely rewrote request system.
+- Now tries to read instead of using threads.
+
+### Fixed
+- A bug where redirects messed up the system
+
 ## 0.3.0 - 2020-09-28
 ### Fixed
 - Now ports are supported, not only using 443
