@@ -22,6 +22,12 @@ pub enum Error {
     Response(ResponseError),
 }
 
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::IO(value)
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum RequestError {
