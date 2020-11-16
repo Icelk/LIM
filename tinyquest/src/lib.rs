@@ -492,3 +492,18 @@ pub fn get(url: &str, user_agent: &str) -> Result<Client> {
     result.request(req)?;
     Ok(result)
 }
+pub fn request(request: http::Request<Vec<u8>>, config: Config) -> Result<Client> {
+    let host = match request.uri().host() {
+        Some(host) => host,
+        None => return Err(Error::Request(RequestError::NoHost)),
+    };
+    let port = request.uri().port_u16().unwrap_or(443);
+    let mut result = Client::connect(
+        Arc::new(config),
+        host,
+        port,
+        if port == 443 { true } else { false },
+    )?;
+    result.request(request)?;
+    Ok(result)
+}
