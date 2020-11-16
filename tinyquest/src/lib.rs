@@ -4,6 +4,7 @@ use http::{Request, Version};
 use native_tls::TlsConnector;
 use std::io::{self, prelude::*};
 use std::iter::FromIterator;
+use std::mem;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::{mem, thread};
@@ -254,62 +255,13 @@ impl Client {
             .set_read_timeout(Some(std::time::Duration::from_millis(100)));
         Ok(())
     }
-
-    pub(crate) fn read_to_vec(reader: &mut dyn Read) -> Result<Vec<u8>> {
-        const BYTES_ADD: usize = 8 * 1024;
-
-        let mut bytes = Vec::with_capacity(BYTES_ADD);
-        unsafe { bytes.set_len(BYTES_ADD) };
-        let mut began_recieving = false;
-        let mut read = 0;
-        loop {
-            match reader.read(&mut bytes[read..]) {
-                Err(err) if err.kind() == io::ErrorKind::Interrupted => {
-                    std::thread::yield_now();
-                    continue;
-                }
-                Err(err)
-                    if err.kind() == io::ErrorKind::WouldBlock
-                        || err.kind() == io::ErrorKind::TimedOut =>
-                {
-                    if began_recieving {
-                        break;
-                    } else {
-                        std::thread::yield_now();
-                        continue;
-                    }
-                }
-
-                Err(err) => {
-                    return Err(Error::IO(err));
-                }
-                Ok(just_read) => {
-                    began_recieving = true;
-                    read += just_read;
-
-                    if read == bytes.len() {
-                        bytes.reserve(BYTES_ADD);
-                        unsafe { bytes.set_len(bytes.capacity()) };
-                    }
-                }
-            };
-        }
-        unsafe { bytes.set_len(read) };
-        Ok(bytes)
-    }
-
-    pub fn done(&mut self) -> bool {
-        let result = self.stream.read(&mut [0; 0]).is_ok();
-        result
-    }
-    pub fn wait(&mut self) -> Result<http::Response<Vec<u8>>> {
+    fn _handle(&mut self) -> Result<(Vec<u8>, usize, Vec<u8>, u16, http::HeaderMap)> {
         let mut bytes = Self::read_to_vec(&mut self.stream)?;
 
-        let mut response = http::Response::builder();
         let mut version = Vec::new();
         let mut status_code = Vec::new();
         let mut reason_phrase = Vec::new();
-        let headers = response.headers_mut().expect("Failed to get headers!");
+        let mut headers = http::HeaderMap::with_capacity(32);
         let mut key = Vec::new();
         let mut value = Vec::new();
 
@@ -433,7 +385,59 @@ impl Client {
             self._request()?;
             return Err(Error::NotReady);
         }
+        Ok((bytes, last_byte, version, status, headers))
+    }
 
+    pub(crate) fn read_to_vec(reader: &mut dyn Read) -> Result<Vec<u8>> {
+        const BYTES_ADD: usize = 8 * 1024;
+
+        let mut bytes = Vec::with_capacity(BYTES_ADD);
+        unsafe { bytes.set_len(BYTES_ADD) };
+        let mut began_recieving = false;
+        let mut read = 0;
+        loop {
+            match reader.read(&mut bytes[read..]) {
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => {
+                    std::thread::yield_now();
+                    continue;
+                }
+                Err(err)
+                    if err.kind() == io::ErrorKind::WouldBlock
+                        || err.kind() == io::ErrorKind::TimedOut =>
+                {
+                    if began_recieving {
+                        break;
+                    } else {
+                        std::thread::yield_now();
+                        continue;
+                    }
+                }
+
+                Err(err) => {
+                    return Err(Error::IO(err));
+                }
+                Ok(just_read) => {
+                    began_recieving = true;
+                    read += just_read;
+
+                    if read == bytes.len() {
+                        bytes.reserve(BYTES_ADD);
+                        unsafe { bytes.set_len(bytes.capacity()) };
+                    }
+                }
+            };
+        }
+        unsafe { bytes.set_len(read) };
+        Ok(bytes)
+    }
+
+    pub fn done(&mut self) -> bool {
+        let result = self.stream.read(&mut [0; 0]).is_ok();
+        result
+    }
+    pub fn wait(&mut self) -> Result<http::Response<Vec<u8>>> {
+        let mut response = http::Response::builder();
+        let (bytes, last_byte, version, status, headers) = self._handle()?;
         response = response
             .version(match &version[..] {
                 b"HTTP/0.9" => Version::HTTP_09,
@@ -444,6 +448,10 @@ impl Client {
                 _ => Version::HTTP_11,
             })
             .status(status);
+
+        for (name, value) in headers.iter() {
+            response = response.header(name, value);
+        }
 
         let mut body: Vec<u8> = bytes.into_iter().skip(last_byte).collect();
         body.truncate(body.len());
