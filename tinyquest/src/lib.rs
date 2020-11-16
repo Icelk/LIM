@@ -7,7 +7,6 @@ use std::iter::FromIterator;
 use std::mem;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
-use std::{mem, thread};
 
 #[derive(Debug)]
 pub enum Error {
@@ -79,14 +78,12 @@ pub enum Content {
 }
 pub struct Config {
     redirect_policy: RedirectPolicy,
-    redirects: u32,
     header: Content,
 }
 impl Default for Config {
     fn default() -> Self {
         Config {
             redirect_policy: RedirectPolicy::default(),
-            redirects: 0,
             header: Content::Both,
         }
     }
@@ -95,7 +92,6 @@ impl Config {
     pub fn no_header() -> Self {
         Config {
             redirect_policy: RedirectPolicy::default(),
-            redirects: 0,
             header: Content::Body,
         }
     }
@@ -116,12 +112,6 @@ enum Connector {
     TLS(native_tls::TlsStream<TcpStream>),
 }
 impl Connector {
-    pub fn set_nonblocking(&mut self, nonblocking: bool) -> io::Result<()> {
-        match self {
-            Self::Raw(stream) => stream.set_nonblocking(nonblocking),
-            Self::TLS(tls_stream) => tls_stream.get_mut().set_nonblocking(nonblocking),
-        }
-    }
     pub fn set_read_timeout(
         &mut self,
         dur: std::option::Option<std::time::Duration>,
@@ -252,7 +242,7 @@ impl Client {
         };
         // Not optimal; make it smart and read chunked encoding later!
         self.stream
-            .set_read_timeout(Some(std::time::Duration::from_millis(100)));
+            .set_read_timeout(Some(std::time::Duration::from_millis(100)))?;
         Ok(())
     }
     fn _handle(&mut self) -> Result<(Vec<u8>, usize, Vec<u8>, u16, http::HeaderMap)> {
