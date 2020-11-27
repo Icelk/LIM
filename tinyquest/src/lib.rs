@@ -15,7 +15,7 @@ pub enum Error {
     FailedToWrite,
     StreamBroken,
     /// If the client had to make a new request due to the redirect policy.
-    NotReady,
+    WouldBlock,
 
     IO(io::Error),
     Request(RequestError),
@@ -23,8 +23,11 @@ pub enum Error {
 }
 
 impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Error::IO(value)
+    fn from(error: io::Error) -> Self {
+        match error.kind() {
+            io::ErrorKind::WouldBlock => Error::WouldBlock,
+            _ => Error::IO(error),
+        }
     }
 }
 
@@ -373,7 +376,7 @@ impl Client {
                 }
             };
             self._request()?;
-            return Err(Error::NotReady);
+            return Err(Error::WouldBlock);
         }
         Ok((bytes, last_byte, version, status, headers))
     }
@@ -454,7 +457,7 @@ impl Client {
     pub fn follow_redirects(&mut self) -> Result<http::Response<Vec<u8>>> {
         loop {
             match self.wait() {
-                Err(Error::NotReady) => continue,
+                Err(Error::WouldBlock) => continue,
                 Err(err) => return Err(err),
                 Ok(result) => return Ok(result),
             }
@@ -479,7 +482,7 @@ impl Client {
     pub fn follow_redirects_write(&mut self, writer: &mut dyn Write) -> Result<()> {
         loop {
             match self.write(writer) {
-                Err(Error::NotReady) => continue,
+                Err(Error::WouldBlock) => continue,
                 Err(err) => return Err(err),
                 Ok(result) => return Ok(result),
             }
