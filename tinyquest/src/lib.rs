@@ -50,30 +50,7 @@ pub enum ResponseError {
     RedirectBrokenLocation,
 }
 
-pub struct Response<T> {
-    data: Arc<Mutex<Result<T>>>,
-}
-impl<T> Response<http::Response<T>>
-where
-    T: FromIterator<u8> + Default,
-{
-    pub fn done(&self) -> bool {
-        self.data.try_lock().is_ok()
-    }
-    pub fn get(self) -> Result<http::Response<T>> {
-        let mut state = self.data.lock().expect("Failed to lock Mutex.");
-        mem::replace(&mut *state, Ok(http::Response::new(T::default())))
-    }
-}
-impl Response<()> {
-    pub fn done(&self) -> bool {
-        self.data.try_lock().is_ok()
-    }
-    pub fn get(self) -> Result<()> {
-        let mut state = self.data.lock().expect("Failed to lock Mutex.");
-        mem::replace(&mut *state, Ok(()))
-    }
-}
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub enum Content {
     Body,
     Header,
