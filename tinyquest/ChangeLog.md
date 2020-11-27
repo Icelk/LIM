@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 0.4.1 - 2002-11-27
+### Removed
+- Old response system
+
+### Changed
+- Updated README example
+
 ## 0.4.0 - 2020-11-16
 ### Changed
 - Completely rewrote request system.
