@@ -1,12 +1,12 @@
+#![warn(missing_debug_implementations)]
+
 use chunked_transfer::Decoder;
 use core::convert::TryFrom;
 use http::{Request, Version};
 use native_tls::TlsConnector;
 use std::io::{self, prelude::*};
-use std::iter::FromIterator;
-use std::mem;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -56,6 +56,7 @@ pub enum Content {
     Header,
     Both,
 }
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Config {
     redirect_policy: RedirectPolicy,
     header: Content,
@@ -76,6 +77,7 @@ impl Config {
         }
     }
 }
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum RedirectPolicy {
     Stay,
     Max(u32),
@@ -87,6 +89,7 @@ impl Default for RedirectPolicy {
     }
 }
 
+#[derive(Debug)]
 enum Connector {
     Raw(TcpStream),
     TLS(native_tls::TlsStream<TcpStream>),
@@ -125,6 +128,7 @@ impl Read for Connector {
     }
 }
 
+#[derive(Debug)]
 pub struct Client {
     stream: Connector,
     config: Arc<Config>,
