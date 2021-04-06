@@ -484,12 +484,7 @@ pub fn get(url: &str, user_agent: &str) -> Result<Client> {
         None => return Err(Error::Request(RequestError::NoHost)),
     };
     let port = req.uri().port_u16().unwrap_or(443);
-    let mut result = Client::connect(
-        Arc::new(Config::default()),
-        host,
-        port,
-        if port == 443 { true } else { false },
-    )?;
+    let mut result = Client::connect(Arc::new(Config::default()), host, port, port == 443)?;
     result.request(req)?;
     Ok(result)
 }
@@ -499,12 +494,7 @@ pub fn request(request: http::Request<Vec<u8>>, config: Config) -> Result<Client
         None => return Err(Error::Request(RequestError::NoHost)),
     };
     let port = request.uri().port_u16().unwrap_or(443);
-    let mut result = Client::connect(
-        Arc::new(config),
-        host,
-        port,
-        if port == 443 { true } else { false },
-    )?;
+    let mut result = Client::connect(Arc::new(config), host, port, port == 443)?;
     result.request(request)?;
     Ok(result)
 }
