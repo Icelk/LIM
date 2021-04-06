@@ -1,7 +1,7 @@
 #![warn(missing_debug_implementations)]
 
+use bytes::Bytes;
 use chunked_transfer::Decoder;
-use core::convert::TryFrom;
 use http::{Request, Version};
 use native_tls::TlsConnector;
 use std::io::{self, prelude::*};
@@ -341,17 +341,15 @@ impl Client {
                 None => unreachable!(),
             };
             *mutable_uri = match headers.get("location") {
-                Some(location) => match http::Uri::try_from(match location.to_str() {
+                Some(location) => {
+                    match http::Uri::from_maybe_shared(Bytes::copy_from_slice(location.as_bytes()))
+                    {
                     Ok(location) => location,
                     Err(..) => {
                         return Err(Error::Response(ResponseError::RedirectBrokenLocation));
                     }
-                }) {
-                    Ok(location) => location,
-                    Err(..) => {
-                        return Err(Error::Response(ResponseError::RedirectBrokenLocation));
                     }
-                },
+                }
                 None => {
                     return Err(Error::Response(ResponseError::RedirectMissingLocation));
                 }

@@ -16,6 +16,7 @@ categories = ["web-programming::http-client"]
 http = "0.2"
 chunked_transfer = "1.2"
 native-tls = "0.2"
+bytes = "1"
 
 [[example]]
 name = "get"
