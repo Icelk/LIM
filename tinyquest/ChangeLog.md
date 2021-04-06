@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+### Fixed
+- Now follows redirects to HTTPS, creating a new (with TLS) and replacing the current `Client`.
+
 ## 0.4.1 - 2002-11-27
 ### Removed
 - Old response system

@@ -344,16 +344,26 @@ impl Client {
                 Some(location) => {
                     match http::Uri::from_maybe_shared(Bytes::copy_from_slice(location.as_bytes()))
                     {
-                    Ok(location) => location,
-                    Err(..) => {
-                        return Err(Error::Response(ResponseError::RedirectBrokenLocation));
-                    }
+                        Ok(location) => location,
+                        Err(..) => {
+                            return Err(Error::Response(ResponseError::RedirectBrokenLocation));
+                        }
                     }
                 }
                 None => {
                     return Err(Error::Response(ResponseError::RedirectMissingLocation));
                 }
             };
+            if mutable_uri.scheme_str() == Some("https") {
+                let mut new_con = Self::connect(
+                    Arc::clone(&self.config),
+                    mutable_uri.host().unwrap(),
+                    443,
+                    true,
+                )?;
+                new_con.request = std::mem::replace(&mut self.request, None);
+                *self = new_con;
+            }
             self._request()?;
             return Err(Error::WouldBlock);
         }
