@@ -3,12 +3,12 @@ Tinyquest is a Rust library aiming to give you a high-level, yet performant expe
 
 ## Usage
 To use `tinyquest`, add this to your `Cargo.toml`:
-```
+```toml
 [dependencies]
 tinyquest = "0.4.1"
 ```
 Then, add this to your crate:
-```
+```rust
 use tinyquest::{get, write};
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
 ```
 ## Examples
 Request a website, and print the HTML:
-```
+```rust
 use tinyquest::get;
 
 fn main() {
