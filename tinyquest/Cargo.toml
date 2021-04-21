@@ -1,7 +1,7 @@
 [package]
 name = "tinyquest"
 description = "A *tiny* library used for making HTTP requests. It interacts with native-tls to be as small as possible, so it can be used in small CLI's"
-repository = "https://github.com/Iselk/LIM/tree/master/tinyquest"
+repository = "https://github.com/Icelk/LIM/tree/master/tinyquest"
 readme = "README.md"
 version = "0.4.1"
 authors = ["Icelk"]
